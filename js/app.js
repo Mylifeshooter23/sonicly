@@ -45,6 +45,10 @@
         html = parts[1] === "editar" ? Views.profile(me.username, true) : Views.profile(parts[1] || me.username, false);
         break;
       case "definicoes": html = Views.settings(); break;
+      case "admin":
+        if (!Store.isAdmin()) { location.replace("#/inicio"); return; }
+        html = Views.admin();
+        break;
       default: location.replace("#/inicio"); return;
     }
     view.innerHTML = html;
@@ -54,6 +58,7 @@
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    document.querySelectorAll(".admin-link").forEach((a) => { a.hidden = !Store.isAdmin(); });
     renderSideUser();
     if (changed) { window.scrollTo(0, 0); view.focus({ preventScroll: true }); }
     if (!Player.state.playing && Player.currentId === null) document.title = "Sonicly — Música independente";
@@ -275,6 +280,40 @@
     },
     logout() { Player.stop(); Store.logout(); go("#/login"); },
     "logout-to-register"() { Player.stop(); Store.logout(); go("#/registo"); },
+    "admin-edit-user"(el) {
+      const u = Store.db.users[el.dataset.user];
+      if (!u) return;
+      document.getElementById("admin-modal-body").innerHTML = Views.adminUserForm(u);
+      UIkit.modal("#admin-modal").show();
+    },
+    async "admin-delete-user"(el) {
+      const u = el.dataset.user;
+      try { await confirmBox(`Apagar a conta @${Views.esc(u)}? As músicas, comentários e gostos desta conta também são apagados. Esta ação não pode ser desfeita.`, "Apagar conta"); } catch { return; }
+      try { Store.adminDeleteUser(u); notify(`Conta @${Views.esc(u)} apagada`); } catch (ex) { notify(ex.message, "danger"); }
+      render();
+    },
+    async "admin-remove-post"(el) {
+      const sample = el.dataset.sample === "true";
+      try {
+        await confirmBox(sample ? "Ocultar esta publicação de exemplo? Podes repô-la mais tarde." : "Apagar esta publicação? Esta ação não pode ser desfeita.", sample ? "Ocultar" : "Apagar");
+      } catch { return; }
+      const p = Store.allPosts().find((x) => x.id === el.dataset.post);
+      if (p && Player.currentId === p.trackId) Player.stop();
+      Store.adminRemovePost(el.dataset.post);
+      notify(sample ? "Publicação ocultada" : "Publicação apagada");
+      render();
+    },
+    "admin-restore-posts"() {
+      Store.adminRestoreSamplePosts();
+      notify("Publicações repostas");
+      render();
+    },
+    async "admin-delete-comment"(el) {
+      try { await confirmBox("Apagar este comentário?", "Apagar"); } catch { return; }
+      Store.adminDeleteComment(el.dataset.post, el.dataset.comment);
+      notify("Comentário apagado");
+      render();
+    },
     async reset() {
       try { await confirmBox("Apagar todas as contas, publicações e bibliotecas guardadas neste navegador?", "Apagar tudo"); } catch { return; }
       Player.stop();
@@ -341,6 +380,23 @@
       }
     } catch (ex) {
       fail(ex.message || "Ocorreu um erro.");
+    }
+  });
+
+  /* ---------- Administração: editar utilizador (janela) ---------- */
+  document.getElementById("admin-modal").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const err = form.querySelector(".form-error");
+    const username = form.dataset.user;
+    try {
+      Store.adminUpdateUser(username, { name: form.name.value, email: form.email.value, bio: form.bio.value });
+      if (form.password && form.password.value) await Store.adminSetPassword(username, form.password.value);
+      UIkit.modal("#admin-modal").hide();
+      notify(`Conta @${Views.esc(username)} atualizada`, "success");
+      render();
+    } catch (ex) {
+      err.textContent = ex.message;
     }
   });
 

@@ -411,6 +411,15 @@ const Views = (() => {
           </div>
         </div>
 
+        ${Store.isAdmin() ? `
+        <div class="panel">
+          <h2>Administração</h2>
+          <div class="setting-row">
+            <div><strong>Painel de administração</strong><p>Gerir contas, publicações e comentários.</p></div>
+            <a class="btn btn-accent" href="#/admin"><span uk-icon="lock"></span> Abrir</a>
+          </div>
+        </div>` : ""}
+
         ${me.guest ? `
         <div class="panel">
           <h2>Conta</h2>
@@ -448,8 +457,114 @@ const Views = (() => {
       </div>`;
   }
 
+  /* ---------- Administração ---------- */
+  function admin() {
+    const users = Store.adminUsers();
+    const posts = Store.allPosts();
+    const comments = Store.adminComments();
+    const likesGiven = Object.values(Store.db.likes).reduce((n, l) => n + l.length, 0);
+    const hidden = Store.db.hiddenPosts.length;
+    const date = (ts) => (ts ? new Date(ts).toLocaleDateString("pt-PT") : "—");
+    const postTitle = (id) => { const p = Store.allPosts().find((x) => x.id === id); const t = p && Store.track(p.trackId); return t ? t.title : "(publicação removida)"; };
+
+    const userRows = users.map((u) => {
+      const n = posts.filter((p) => p.author === u.username).length;
+      const role = Store.isAdmin(u.username) ? `<span class="tag">admin</span>` : u.guest ? `<span class="tag tag-muted">convidado</span>` : "";
+      return `<tr>
+        <td><div class="cell-user">${avatar(u, "avatar-sm")}<div><strong>${esc(u.name)}</strong> ${role}<small>@${esc(u.username)}</small></div></div></td>
+        <td>${u.email ? esc(u.email) : '<span class="muted">—</span>'}</td>
+        <td><span class="muted" title="As palavras-passe são guardadas encriptadas (hash) e não podem ser vistas.">${u.guest ? "sem palavra-passe" : "•••••••• (protegida)"}</span></td>
+        <td>${date(u.createdAt)}</td>
+        <td>${n}</td>
+        <td class="cell-actions">
+          <button class="btn btn-ghost btn-sm" data-action="admin-edit-user" data-user="${esc(u.username)}"><span uk-icon="icon: pencil; ratio: .8"></span> Editar</button>
+          ${u.username !== Store.db.session ? `<button class="icon-btn" data-action="admin-delete-user" data-user="${esc(u.username)}" aria-label="Apagar ${esc(u.username)}" title="Apagar conta"><span uk-icon="trash"></span></button>` : ""}
+        </td>
+      </tr>`;
+    }).join("");
+
+    const postRows = posts.map((p) => {
+      const t = Store.track(p.trackId);
+      const a = Store.user(p.author);
+      const sample = !Store.db.posts.some((x) => x.id === p.id);
+      return `<tr>
+        <td><strong>${esc(t.title)}</strong>${sample ? ' <span class="tag tag-muted">exemplo</span>' : ""}</td>
+        <td><a href="#/perfil/${esc(p.author)}">${esc(a ? a.name : p.author)}</a></td>
+        <td>${Store.likeCount(p)}</td>
+        <td>${Store.comments(p.id).length}</td>
+        <td>${date(p.createdAt)}</td>
+        <td class="cell-actions"><button class="icon-btn" data-action="admin-remove-post" data-post="${p.id}" data-sample="${sample}" title="${sample ? "Ocultar" : "Apagar"}" aria-label="${sample ? "Ocultar" : "Apagar"} publicação"><span uk-icon="${sample ? "ban" : "trash"}"></span></button></td>
+      </tr>`;
+    }).join("");
+
+    const commentRows = comments.map((c) => {
+      const u = Store.user(c.user);
+      return `<div class="comment">
+        ${avatar(u, "avatar-sm")}
+        <div class="bubble"><strong>${esc(u ? u.name : c.user)}</strong> <small class="muted">em “${esc(postTitle(c.postId))}” · ${timeAgo(c.createdAt)}</small><p>${esc(c.text)}</p></div>
+        <button class="icon-btn" data-action="admin-delete-comment" data-post="${c.postId}" data-comment="${c.id}" aria-label="Apagar comentário" title="Apagar comentário"><span uk-icon="trash"></span></button>
+      </div>`;
+    }).join("");
+
+    return `
+      <div class="page-head">
+        <h1>Administração</h1>
+        <span class="tag"><span uk-icon="icon: lock; ratio: .8"></span> Só administradores</span>
+      </div>
+
+      <div class="admin-stats">
+        <div class="panel"><strong>${users.length}</strong><span>contas</span></div>
+        <div class="panel"><strong>${posts.length}</strong><span>publicações</span></div>
+        <div class="panel"><strong>${comments.length}</strong><span>comentários</span></div>
+        <div class="panel"><strong>${likesGiven}</strong><span>gostos dados</span></div>
+      </div>
+
+      <p class="admin-note muted"><span uk-icon="info"></span><span>Este protótipo não tem servidor: aqui aparecem as contas e publicações criadas <strong>neste navegador</strong>. As palavras-passe são guardadas encriptadas e não podem ser vistas, mas podes definir uma nova em “Editar”.</span></p>
+
+      <div class="section">
+        <h2>Utilizadores</h2>
+        <div class="table-wrap"><table class="admin-table">
+          <thead><tr><th>Utilizador</th><th>Email</th><th>Palavra-passe</th><th>Criado</th><th>Músicas</th><th></th></tr></thead>
+          <tbody>${userRows}</tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div class="page-head" style="margin-bottom:12px">
+          <h2 style="margin:0">Publicações</h2>
+          ${hidden ? `<button class="btn btn-ghost btn-sm" data-action="admin-restore-posts">Repor ${hidden} ${hidden === 1 ? "publicação oculta" : "publicações ocultas"}</button>` : ""}
+        </div>
+        <div class="table-wrap"><table class="admin-table">
+          <thead><tr><th>Música</th><th>Artista</th><th>Gostos</th><th>Coment.</th><th>Data</th><th></th></tr></thead>
+          <tbody>${postRows}</tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <h2>Comentários dos utilizadores</h2>
+        ${comments.length ? `<div class="panel">${commentRows}</div>` : empty("comments", "Sem comentários", "Os comentários feitos pelos utilizadores aparecem aqui.")}
+      </div>`;
+  }
+
+  function adminUserForm(u) {
+    return `
+      <h2 class="modal-title">Editar @${esc(u.username)}</h2>
+      <form id="admin-user-form" class="form-stack" data-user="${esc(u.username)}" novalidate>
+        <label>Nome <input class="uk-input" name="name" maxlength="40" value="${esc(u.name)}" required></label>
+        <label>Email <input class="uk-input" type="email" name="email" value="${esc(u.email)}" ${u.guest ? "disabled" : ""}></label>
+        <label>Biografia <textarea class="uk-textarea" name="bio" rows="2" maxlength="200">${esc(u.bio)}</textarea></label>
+        ${u.guest ? "" : `<label>Nova palavra-passe <small class="muted">(deixa vazio para manter a atual)</small>
+          <input class="uk-input" type="password" name="password" autocomplete="new-password" minlength="6"></label>`}
+        <p class="form-error" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost uk-modal-close">Cancelar</button>
+          <button type="submit" class="btn btn-accent">Guardar</button>
+        </div>
+      </form>`;
+  }
+
   return {
     esc, coverBg, initials, avatar, genreName,
-    login, register, home, feed, post, library, profile, settings
+    login, register, home, feed, post, library, profile, settings, admin, adminUserForm
   };
 })();

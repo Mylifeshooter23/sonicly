@@ -30,6 +30,7 @@
         <a href="#/biblioteca" data-route="biblioteca"><span uk-icon="album"></span> Biblioteca</a>
         <a href="#/perfil" data-route="perfil"><span uk-icon="user"></span> Perfil</a>
         <a href="#/definicoes" data-route="definicoes"><span uk-icon="cog"></span> Definições</a>
+        <a href="#/admin" data-route="admin" class="admin-link" hidden><span uk-icon="lock"></span> Administração</a>
       </nav>
       <button class="btn btn-accent btn-block" data-action="open-publish">
         <span uk-icon="plus"></span> Publicar música
@@ -120,6 +121,14 @@
         <input class="uk-input" name="name" maxlength="40" placeholder="Nova playlist" required>
         <button class="btn btn-accent" type="submit">Criar</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Janela: editar utilizador (administração) -->
+  <div id="admin-modal" uk-modal>
+    <div class="uk-modal-dialog uk-modal-body modal-card">
+      <button class="uk-modal-close-default" type="button" uk-close></button>
+      <div id="admin-modal-body"></div>
     </div>
   </div>
 

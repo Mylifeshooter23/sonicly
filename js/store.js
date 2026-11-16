@@ -7,6 +7,8 @@
 
 const Store = (() => {
   const KEY = "sonicly-db-v1";
+  // Contas com acesso ao painel de administração.
+  const ADMINS = ["mylifeshooter23"];
   const sessionAudio = new Map(); // áudio carregado que não coube no armazenamento
 
   const empty = () => ({
@@ -18,6 +20,7 @@ const Store = (() => {
     likes: {},
     comments: {},
     lib: {},
+    hiddenPosts: [],
     settings: { theme: "dark", volume: 0.8 }
   });
 
@@ -136,7 +139,9 @@ const Store = (() => {
       const t = track(p.trackId);
       return { id: p.id, trackId: p.trackId, author: t.artist, text: p.text, createdAt: db.seededAt - p.ago, baseLikes: p.likes };
     });
-    return sample.concat(db.posts).sort((a, b) => b.createdAt - a.createdAt);
+    return sample.concat(db.posts)
+      .filter((p) => !db.hiddenPosts.includes(p.id))
+      .sort((a, b) => b.createdAt - a.createdAt);
   }
 
   function readFileAsDataURL(file) {
@@ -179,9 +184,9 @@ const Store = (() => {
     return { track: t, stored };
   }
 
-  function deletePost(postId) {
+  function deletePost(postId, asAdmin) {
     const p = db.posts.find((x) => x.id === postId);
-    if (!p || p.author !== db.session) return;
+    if (!p || (p.author !== db.session && !(asAdmin && isAdmin()))) return;
     db.posts = db.posts.filter((x) => x.id !== postId);
     db.tracks = db.tracks.filter((t) => t.id !== p.trackId);
     delete db.likes[postId];
@@ -275,6 +280,87 @@ const Store = (() => {
     save();
   }
 
+  /* ---------- Administração ---------- */
+  function isAdmin(username) {
+    const u = username || db.session;
+    return !!u && ADMINS.includes(u) && !!db.users[u];
+  }
+
+  function requireAdmin() {
+    if (!isAdmin()) throw new Error("Sem permissão de administrador.");
+  }
+
+  function adminUsers() {
+    return Object.values(db.users).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  function adminUpdateUser(username, { name, email, bio }) {
+    requireAdmin();
+    const u = db.users[username];
+    if (!u) throw new Error("Utilizador não encontrado.");
+    if (!name || name.trim().length < 2) throw new Error("O nome precisa de pelo menos 2 caracteres.");
+    if (!u.guest && !/^\S+@\S+\.\S+$/.test(email || "")) throw new Error("Email inválido.");
+    Object.assign(u, { name: name.trim(), email: (email || "").trim(), bio: (bio || "").trim() });
+    save();
+  }
+
+  async function adminSetPassword(username, password) {
+    requireAdmin();
+    const u = db.users[username];
+    if (!u || u.guest) throw new Error("Esta conta não usa palavra-passe.");
+    if (!password || password.length < 6) throw new Error("A palavra-passe precisa de pelo menos 6 caracteres.");
+    u.passHash = await hash(password);
+    save();
+  }
+
+  function adminDeleteUser(username) {
+    requireAdmin();
+    if (username === db.session) throw new Error("Não podes apagar a tua própria conta aqui.");
+    if (!db.users[username]) return;
+    db.posts.filter((p) => p.author === username).forEach((p) => {
+      delete db.likes[p.id];
+      delete db.comments[p.id];
+    });
+    const trackIds = db.tracks.filter((t) => t.artist === username).map((t) => t.id);
+    db.posts = db.posts.filter((p) => p.author !== username);
+    db.tracks = db.tracks.filter((t) => t.artist !== username);
+    Object.keys(db.likes).forEach((k) => { db.likes[k] = db.likes[k].filter((u) => u !== username); });
+    Object.keys(db.comments).forEach((k) => { db.comments[k] = db.comments[k].filter((c) => c.user !== username); });
+    Object.values(db.lib).forEach((l) => {
+      l.favorites = l.favorites.filter((id) => !trackIds.includes(id));
+      l.playlists.forEach((pl) => { pl.trackIds = pl.trackIds.filter((id) => !trackIds.includes(id)); });
+    });
+    delete db.lib[username];
+    delete db.users[username];
+    save();
+  }
+
+  // Remove uma publicação: as dos utilizadores são apagadas; as de exemplo ficam ocultas.
+  function adminRemovePost(postId) {
+    requireAdmin();
+    if (db.posts.some((p) => p.id === postId)) deletePost(postId, true);
+    else if (!db.hiddenPosts.includes(postId)) { db.hiddenPosts.push(postId); save(); }
+  }
+
+  function adminRestoreSamplePosts() {
+    requireAdmin();
+    db.hiddenPosts = [];
+    save();
+  }
+
+  function adminDeleteComment(postId, commentId) {
+    requireAdmin();
+    db.comments[postId] = (db.comments[postId] || []).filter((c) => c.id !== commentId);
+    save();
+  }
+
+  // Todos os comentários feitos por utilizadores (os de exemplo não contam).
+  function adminComments() {
+    const out = [];
+    Object.entries(db.comments).forEach(([postId, list]) => list.forEach((c) => out.push(Object.assign({ postId }, c))));
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
   /* ---------- Definições ---------- */
   function settings() { return db.settings; }
   function setSetting(k, v) { db.settings[k] = v; save(); }
@@ -285,6 +371,8 @@ const Store = (() => {
     allTracks, track, trackAudio, allPosts, publish, deletePost,
     likeCount, isLiked, toggleLike, comments, addComment,
     lib, isFavorite, toggleFavorite, createPlaylist, addToPlaylist, removeFromPlaylist, deletePlaylist,
-    saveDraft, deleteDraft, settings, setSetting
+    saveDraft, deleteDraft, settings, setSetting,
+    isAdmin, adminUsers, adminUpdateUser, adminSetPassword, adminDeleteUser,
+    adminRemovePost, adminRestoreSamplePosts, adminDeleteComment, adminComments
   };
 })();
