@@ -2,6 +2,8 @@
 
 Plataforma web para **artistas independentes** publicarem a sua música e receberem feedback (gostos e comentários) de ouvintes reais.
 
+**🔗 Site: https://mylifeshooter23.github.io/sonicly/**
+
 Projeto de Aptidão Profissional (PAP) — Curso Profissional de Técnico de Gestão e Programação de Sistemas Informáticos.
 
 ## Funcionalidades
@@ -27,7 +29,7 @@ Projeto de Aptidão Profissional (PAP) — Curso Profissional de Técnico de Ges
 | Web Audio API | Leitor e geração das músicas de demonstração |
 | localStorage | Guardar contas e dados no navegador (protótipo) |
 | GitHub | Controlo de versões do código |
-| Vercel | Alojamento do site |
+| GitHub Pages | Alojamento do site |
 
 ## Estrutura de pastas
 
